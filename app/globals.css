@@ -1,0 +1,223 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f6f7ff;
+  --foreground: #1f2937;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: "Segoe UI", Arial, sans-serif;
+  --font-mono: "SFMono-Regular", "Consolas", monospace;
+}
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply m-0 bg-[#f6f7ff] text-slate-700 antialiased;
+    background-image:
+      radial-gradient(
+        circle at top left,
+        rgba(255, 209, 220, 0.45),
+        transparent 25%
+      ),
+      radial-gradient(
+        circle at top right,
+        rgba(196, 181, 253, 0.45),
+        transparent 24%
+      ),
+      linear-gradient(180deg, #f8f7ff 0%, #f6f7ff 100%);
+    font-family: Arial, Helvetica, sans-serif;
+  }
+
+  a {
+    @apply no-underline;
+  }
+
+  button {
+    @apply cursor-pointer;
+  }
+}
+
+@layer components {
+  .student-app {
+    background: #f7f7f0;
+    background-image:
+      radial-gradient(
+        circle at 90% 8%,
+        rgba(229, 239, 218, 0.7),
+        transparent 22%
+      ),
+      linear-gradient(135deg, rgba(255, 255, 255, 0.72), transparent 42%);
+  }
+  .student-header {
+    color: #354052;
+  }
+  .icon-button {
+    @apply flex h-10 w-10 items-center justify-center rounded-2xl border border-[#e8e8df] bg-white text-[#75806f] transition hover:-translate-y-0.5 hover:border-[#a6bd9e] hover:text-[#6f956d];
+  }
+  .brand-mark {
+    @apply flex h-10 w-10 items-center justify-center rounded-2xl bg-[#dcebd3] text-sm font-black text-[#587052] shadow-[0_6px_14px_rgba(111,149,109,.15)];
+  }
+  .sidebar-link {
+    @apply flex items-center gap-3 rounded-2xl px-3 py-3 text-sm font-semibold text-[#7b8478] transition hover:bg-[#f1f4ea] hover:text-[#587052];
+  }
+  .sidebar-link-active {
+    @apply bg-[#e9f1e4] text-[#587052] shadow-[0_8px_20px_rgba(111,149,109,.1)];
+  }
+  .avatar {
+    @apply flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#d8e8d0] text-xs font-black text-[#587052];
+  }
+  .notification-dot {
+    @apply absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-[#df8e70] text-[9px] font-bold text-white;
+  }
+  .notification-popover {
+    @apply absolute right-0 top-12 z-50 w-64 rounded-2xl border border-[#e8e8df] bg-[#fffdf8] p-4 shadow-[0_16px_40px_rgba(53,64,82,.14)];
+  }
+  .hero-panel {
+    @apply rounded-[32px] border border-[#dbe7d3] bg-[#e8f1e2] shadow-[0_20px_60px_rgba(111,149,109,.1)];
+  }
+  .hero-doodle {
+    @apply absolute -right-4 -top-10 text-[160px] leading-none text-[#cddfc5]/80;
+  }
+  .hero-doodle span {
+    @apply absolute bottom-2 right-24 text-[74px] text-white/70;
+  }
+  .eyebrow {
+    @apply text-[10px] font-bold uppercase tracking-[.2em] text-[#9a9b83];
+  }
+  .section-title {
+    @apply mt-1 text-xl font-black tracking-tight text-[#354052];
+  }
+  .quick-card {
+    @apply relative rounded-3xl border border-[#e8e8df] bg-white p-4 shadow-[0_12px_30px_rgba(53,64,82,.04)] transition hover:-translate-y-1 hover:shadow-[0_16px_34px_rgba(53,64,82,.1)];
+  }
+  .quick-sage {
+    background: #eef5e9;
+  }
+  .quick-peach {
+    background: #fff0e9;
+  }
+  .quick-yellow {
+    background: #fff7df;
+  }
+  .quick-blue {
+    background: #eaf3f5;
+  }
+  .quick-icon {
+    @apply flex h-10 w-10 items-center justify-center rounded-2xl bg-white/80 text-[#6f956d];
+  }
+  .soft-panel {
+    @apply rounded-[28px] border border-[#e8e8df] bg-[#fffdf8] shadow-[0_14px_40px_rgba(53,64,82,.045)];
+  }
+  .date-chip {
+    @apply rounded-full bg-[#f1eee4] px-3 py-2 text-xs font-bold text-[#7d877d];
+  }
+  .pulse-dot {
+    @apply inline-block h-2 w-2 rounded-full bg-[#76a171] shadow-[0_0_0_5px_rgba(118,161,113,.14)];
+  }
+  .label-muted {
+    @apply text-[10px] font-bold uppercase tracking-wider text-[#9a9b83];
+  }
+  .metric-tile {
+    @apply flex flex-col items-center gap-2 rounded-2xl bg-[#f7f7f0] p-4 text-center;
+  }
+  .metric-tile strong {
+    @apply text-lg font-black text-[#354052];
+  }
+  .metric-tile span {
+    @apply text-[10px] text-[#9a9b83];
+  }
+  .assignment-row {
+    @apply flex items-center gap-3 rounded-2xl border border-[#eeeade] bg-white p-3 transition hover:border-[#c7d9bf] hover:bg-[#fbfcf7];
+  }
+  .status-pill {
+    @apply rounded-full px-2.5 py-1 text-[10px] font-bold;
+  }
+  .status-warn {
+    @apply bg-[#fff2cf] text-[#9b792f];
+  }
+  .status-info {
+    @apply bg-[#e9f2f5] text-[#5b8190];
+  }
+  .status-success {
+    @apply bg-[#e8f3e5] text-[#648660];
+  }
+  .status-danger {
+    @apply bg-[#fbe9e5] text-[#a65f57];
+  }
+  .primary-button {
+    @apply items-center gap-2 rounded-full bg-[#6f956d] px-5 py-3 text-sm font-bold text-white shadow-[0_10px_20px_rgba(111,149,109,.2)] transition hover:-translate-y-0.5 hover:bg-[#5d825b];
+  }
+  .bottom-link {
+    @apply flex min-w-14 flex-col items-center gap-1 rounded-2xl px-2 py-1 text-[10px] font-semibold text-[#9a9b83];
+  }
+  .bottom-link-active {
+    @apply flex min-w-14 flex-col items-center gap-1 rounded-2xl bg-[#e9f1e4] px-2 py-1 text-[10px] font-semibold text-[#587052];
+  }
+  .teacher-app {
+    background: #fbf8f4;
+    background-image:
+      radial-gradient(
+        circle at 88% 7%,
+        rgba(255, 218, 218, 0.55),
+        transparent 23%
+      ),
+      radial-gradient(
+        circle at 5% 32%,
+        rgba(238, 230, 250, 0.52),
+        transparent 22%
+      ),
+      linear-gradient(135deg, rgba(255, 255, 255, 0.72), transparent 45%);
+  }
+  .teacher-brand-mark {
+    @apply flex h-10 w-10 items-center justify-center rounded-2xl bg-[#f7d9d7] text-sm font-black text-[#a8656c] shadow-[0_6px_14px_rgba(214,143,148,.18)];
+  }
+  .teacher-avatar {
+    @apply flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#f7d9d7] text-xs font-black text-[#a8656c];
+  }
+  .teacher-sidebar-link:hover {
+    @apply bg-[#fff0ef] text-[#a8656c];
+  }
+  .teacher-sidebar-active {
+    @apply bg-[#fbe6e4] text-[#a8656c] shadow-[0_8px_20px_rgba(214,143,148,.12)];
+  }
+  .teacher-dot {
+    @apply bg-[#d8898c];
+  }
+  .teacher-bottom-active {
+    @apply bg-[#fbe6e4] text-[#a8656c];
+  }
+  .teacher-hero {
+    @apply rounded-[32px] border border-[#f0dada] bg-[#fbe8e5] shadow-[0_20px_60px_rgba(214,143,148,.11)];
+  }
+  .teacher-quick-card {
+    @apply relative rounded-3xl border border-[#eee5e1] bg-white p-4 shadow-[0_12px_30px_rgba(75,62,67,.045)] transition hover:-translate-y-1 hover:shadow-[0_16px_34px_rgba(75,62,67,.1)];
+  }
+  .teacher-panel {
+    @apply rounded-[28px] border border-[#eee5e1] bg-[#fffdfa] shadow-[0_14px_40px_rgba(75,62,67,.045)];
+  }
+  .teacher-stat {
+    @apply rounded-2xl bg-[#faf4f0] p-4;
+  }
+  .teacher-stat strong {
+    @apply block text-2xl font-black text-[#354052];
+  }
+  .teacher-stat span {
+    @apply mt-1 block text-[11px] font-semibold text-[#a28e96];
+  }
+  .teacher-progress {
+    @apply h-2 overflow-hidden rounded-full bg-[#f0e8e3];
+  }
+  .teacher-progress > span {
+    @apply block h-full rounded-full bg-[#d8898c];
+  }
+}
