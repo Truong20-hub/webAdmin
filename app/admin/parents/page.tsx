@@ -3,19 +3,17 @@
 import {
   ChevronDown,
   Edit3,
-  FileUp,
   Mail,
   Phone,
-  Plus,
   Search,
   Trash2,
   UserRoundCheck,
   X,
 } from "lucide-react";
-import type { ChangeEvent, FormEvent } from "react";
-import { useMemo, useRef, useState } from "react";
-import * as XLSX from "xlsx";
+import type { FormEvent } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { PageShell } from "@/components/admin/PageShell";
+import { apiRequest } from "@/api/client";
 
 type Parent = {
   hoTen: string;
@@ -27,69 +25,6 @@ type Parent = {
   ngheNghiep: string;
   dangHoatDong: boolean | null;
 };
-
-const initialParents: Parent[] = [
-  {
-    hoTen: "Nguyễn Văn Hùng",
-    hocVien: "Nguyễn Minh Anh",
-    gioiTinh: "Nam",
-    soDienThoai: "0903123456",
-    email: "hung.nguyen@gmail.com",
-    diaChi: "Hà Nội",
-    ngheNghiep: "Kỹ sư",
-    dangHoatDong: true,
-  },
-  {
-    hoTen: "Trần Thị Mai",
-    hocVien: "Trần Gia Bảo",
-    gioiTinh: "Nữ",
-    soDienThoai: "0918567890",
-    email: "mai.tran@gmail.com",
-    diaChi: "Đà Nẵng",
-    ngheNghiep: "Giáo viên",
-    dangHoatDong: true,
-  },
-  {
-    hoTen: "Lê Quốc Khánh",
-    hocVien: "Lê Hoàng Nam",
-    gioiTinh: "Nam",
-    soDienThoai: "0987123456",
-    email: "khanh.le@gmail.com",
-    diaChi: "Hải Phòng",
-    ngheNghiep: "Kinh doanh",
-    dangHoatDong: null,
-  },
-  {
-    hoTen: "Phạm Ngọc Lan",
-    hocVien: "Phạm Thảo Vy",
-    gioiTinh: "Nữ",
-    soDienThoai: "0934567812",
-    email: "lan.pham@gmail.com",
-    diaChi: "Hồ Chí Minh",
-    ngheNghiep: "Nhân viên văn phòng",
-    dangHoatDong: true,
-  },
-  {
-    hoTen: "Đỗ Minh Tâm",
-    hocVien: "Đỗ Minh Khang",
-    gioiTinh: "Nam",
-    soDienThoai: "0978123490",
-    email: "tam.do@gmail.com",
-    diaChi: "Bình Dương",
-    ngheNghiep: "Bác sĩ",
-    dangHoatDong: true,
-  },
-  {
-    hoTen: "Võ Thanh Hà",
-    hocVien: "Võ Lan Anh",
-    gioiTinh: "Nữ",
-    soDienThoai: "0945678123",
-    email: "ha.vo@gmail.com",
-    diaChi: "Thái Nguyên",
-    ngheNghiep: "Chưa cập nhật",
-    dangHoatDong: false,
-  },
-];
 
 const emptyForm = {
   hoTen: "",
@@ -104,8 +39,7 @@ const emptyForm = {
 const pageSize = 5;
 
 export default function ParentManagementPage() {
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const [parents, setParents] = useState<Parent[]>(initialParents);
+  const [parents, setParents] = useState<Parent[]>([]);
   const [search, setSearch] = useState("");
   const [studentFilter, setStudentFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState<
@@ -116,6 +50,41 @@ export default function ParentManagementPage() {
   const [editingParent, setEditingParent] = useState<Parent | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isStudentMenuOpen, setIsStudentMenuOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState("");
+
+  useEffect(() => {
+    void apiRequest<Array<{
+      hoTen: string;
+      tenPhuHuynh?: string | null;
+      sdtPhuHuynh?: string | null;
+      gioiTinh?: string | null;
+      diaChi?: string | null;
+      dangHoatDong?: boolean;
+    }> | { data?: Array<{
+      hoTen: string;
+      tenPhuHuynh?: string | null;
+      sdtPhuHuynh?: string | null;
+      gioiTinh?: string | null;
+      diaChi?: string | null;
+      dangHoatDong?: boolean;
+    }> }>("/HocVien")
+      .then((response) => {
+        const students = Array.isArray(response) ? response : response.data ?? [];
+        setParents(students.filter((student) => student.tenPhuHuynh || student.sdtPhuHuynh).map((student) => ({
+          hoTen: student.tenPhuHuynh ?? "Chưa cập nhật",
+          hocVien: student.hoTen,
+          gioiTinh: "",
+          soDienThoai: student.sdtPhuHuynh ?? "",
+          email: "",
+          diaChi: "",
+          ngheNghiep: "",
+          dangHoatDong: student.dangHoatDong ?? null,
+        })));
+      })
+      .catch((error: unknown) => setErrorMessage(error instanceof Error ? error.message : "Không tải được thông tin phụ huynh."))
+      .finally(() => setIsLoading(false));
+  }, []);
 
   const studentOptions = useMemo(
     () =>
@@ -189,119 +158,19 @@ export default function ParentManagementPage() {
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!form.hoTen.trim()) return;
-    const parentData = {
-      ...form,
-      dangHoatDong:
-        form.dangHoatDong === "null" ? null : form.dangHoatDong === "true",
-    };
-    if (editingParent) {
-      setParents((items) =>
-        items.map((parent) =>
-          parent === editingParent ? { ...parent, ...parentData } : parent,
-        ),
-      );
-    } else {
-      setParents((items) => [{ ...parentData }, ...items]);
-      setCurrentPage(1);
-    }
-    setEditingParent(null);
-    setForm(emptyForm);
-    setIsFormOpen(false);
+    setErrorMessage("API hiện chưa hỗ trợ thêm hoặc cập nhật phụ huynh. Hãy chỉnh sửa thông tin liên hệ trong hồ sơ học viên.");
   };
 
   const handleDelete = (parent: Parent) => {
-    if (window.confirm(`Xóa thông tin phụ huynh ${parent.hoTen}?`)) {
-      setParents((items) => items.filter((item) => item !== parent));
-    }
-  };
-
-  const handleImportExcel = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    try {
-      const workbook = XLSX.read(await file.arrayBuffer(), { type: "array" });
-      const rows = XLSX.utils.sheet_to_json<Record<string, string>>(
-        workbook.Sheets[workbook.SheetNames[0]],
-        { defval: "" },
-      );
-      const imported = rows
-        .map((row) => {
-          const value = (keys: string[]) =>
-            String(keys.map((key) => row[key]).find(Boolean) ?? "").trim();
-          const hoTen = value(["hoTen", "fullName", "Họ tên"]);
-          if (!hoTen) return null;
-          const dangHoatDong = value([
-            "dangHoatDong",
-            "active",
-            "Đang hoạt động",
-          ]);
-          return {
-            hoTen,
-            hocVien: value(["hocVien", "student", "Học viên"]),
-            gioiTinh: value(["gioiTinh", "gender", "Giới tính"]),
-            soDienThoai: value(["soDienThoai", "phone", "Số điện thoại"]),
-            email: value(["email", "Email"]),
-            diaChi: value(["diaChi", "address", "Địa chỉ"]),
-            ngheNghiep: value(["ngheNghiep", "occupation", "Nghề nghiệp"]),
-            dangHoatDong:
-              dangHoatDong === ""
-                ? null
-                : !["false", "0", "không", "ngừng hoạt động"].includes(
-                    dangHoatDong.toLowerCase(),
-                  ),
-          } satisfies Parent;
-        })
-        .filter(Boolean) as Parent[];
-      if (!imported.length) {
-        window.alert(
-          "File không chứa dữ liệu hợp lệ. Cần có cột bắt buộc: hoTen.",
-        );
-        return;
-      }
-      setParents((items) => [...imported, ...items]);
-      setCurrentPage(1);
-      window.alert(`Đã import ${imported.length} phụ huynh thành công.`);
-    } catch (error) {
-      console.error(error);
-      window.alert(
-        "Import file thất bại. Vui lòng kiểm tra định dạng Excel/CSV.",
-      );
-    } finally {
-      event.target.value = "";
-    }
+    setErrorMessage(`API hiện chưa hỗ trợ xóa thông tin phụ huynh ${parent.hoTen}.`);
   };
 
   return (
     <PageShell
       title="Quản lý phụ huynh"
-      description="Theo dõi thông tin liên hệ và học viên được phụ huynh phụ trách"
-      action={
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            className="inline-flex items-center gap-2 rounded-full border border-violet-200 bg-white px-4 py-2 text-sm font-medium text-violet-600 shadow-sm transition hover:bg-violet-50"
-          >
-            <FileUp className="h-4 w-4" /> Import Excel
-          </button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".xlsx,.xls,.csv"
-            onChange={handleImportExcel}
-            className="hidden"
-          />
-          <button
-            type="button"
-            onClick={() => openForm()}
-            className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-violet-500 to-pink-400 px-4 py-2 text-sm font-medium text-white shadow-[0_12px_30px_rgba(168,85,247,0.2)]"
-          >
-            <Plus className="h-4 w-4" /> Thêm phụ huynh
-          </button>
-        </div>
-      }
+      description="Thông tin phụ huynh được lấy từ hồ sơ học viên; API hiện chỉ hỗ trợ xem."
     >
+      {errorMessage && <div role="alert" className="mb-4 rounded-xl bg-rose-50 px-4 py-3 text-sm text-rose-700">{errorMessage}</div>}
       <div className="mb-6 grid gap-4 md:grid-cols-3">
         {[
           {
@@ -319,8 +188,7 @@ export default function ParentManagementPage() {
           },
           {
             label: "Học viên được liên kết",
-            value: parents.filter((parent) => parent.email.trim() !== "")
-              .length,
+            value: parents.length,
             icon: Mail,
             tone: "bg-pink-50 text-pink-600",
           },
@@ -462,9 +330,11 @@ export default function ParentManagementPage() {
               </tr>
             </thead>
             <tbody>
-              {currentParents.map((parent) => (
+              {isLoading ? (
+                <tr><td colSpan={9} className="px-3 py-8 text-center text-slate-500">Đang tải...</td></tr>
+              ) : currentParents.map((parent) => (
                 <tr
-                  key={`${parent.hoTen}-${parent.email}`}
+                key={`${parent.hoTen}-${parent.hocVien}`}
                   className="border-t border-slate-100"
                 >
                   <td className="px-3 py-4 text-sm font-medium text-slate-700">
@@ -504,7 +374,9 @@ export default function ParentManagementPage() {
                       <button
                         type="button"
                         onClick={() => openForm(parent)}
-                        className="flex h-9 w-9 items-center justify-center rounded-xl border border-violet-100 bg-violet-50 text-violet-600 transition hover:bg-violet-100"
+                        disabled
+                        title="API chưa hỗ trợ chỉnh sửa phụ huynh."
+                        className="flex h-9 w-9 cursor-not-allowed items-center justify-center rounded-xl border border-violet-100 bg-violet-50 text-violet-300"
                         aria-label={`Sửa ${parent.hoTen}`}
                       >
                         <Edit3 className="h-4 w-4" />
@@ -512,7 +384,9 @@ export default function ParentManagementPage() {
                       <button
                         type="button"
                         onClick={() => handleDelete(parent)}
-                        className="flex h-9 w-9 items-center justify-center rounded-xl border border-rose-100 bg-rose-50 text-rose-500 transition hover:bg-rose-100"
+                        disabled
+                        title="API chưa hỗ trợ xóa phụ huynh."
+                        className="flex h-9 w-9 cursor-not-allowed items-center justify-center rounded-xl border border-rose-100 bg-rose-50 text-rose-300"
                         aria-label={`Xóa ${parent.hoTen}`}
                       >
                         <Trash2 className="h-4 w-4" />

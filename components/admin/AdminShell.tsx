@@ -7,8 +7,11 @@ import {
   BarChart3,
   Bell,
   CalendarCheck,
+  CalendarDays,
+  ClipboardCheck,
   ChevronDown,
   ClipboardList,
+  DoorOpen,
   GraduationCap,
   LayoutDashboard,
   Library,
@@ -23,12 +26,14 @@ import {
 
 const navItems = [
   { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/admin/users", label: "Quản lý người dùng", icon: Users },
+
   { href: "/admin/students", label: "Quản lý học viên", icon: GraduationCap },
-  { href: "/admin/parents", label: "Quản lý phụ huynh", icon: UserRoundCheck },
   { href: "/admin/teachers", label: "Quản lý giáo viên", icon: Presentation },
-  { href: "/admin/classes", label: "Quản lý lớp học", icon: Library },
   { href: "/admin/courses", label: "Quản lý khóa học", icon: Library },
+  { href: "/admin/rooms", label: "Quản lý phòng học", icon: DoorOpen },
+  { href: "/admin/classes", label: "Quản lý lớp học", icon: Library },
+  { href: "/admin/schedules", label: "Quản lý lịch học và lịch dạy", icon: CalendarDays },
+  { href: "/admin/exams", label: "Quản lý lịch thi", icon: ClipboardCheck },
   { href: "/admin/grades", label: "Quản lý bảng điểm", icon: ClipboardList },
   {
     href: "/admin/attendance",

@@ -4,13 +4,17 @@ import {
   BadgeCheck,
   CircleDollarSign,
   Clock3,
+  Edit3,
   FolderOpen,
   Plus,
+  Search,
   Sparkles,
+  Trash2,
   X,
 } from "lucide-react";
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { PageShell } from "@/components/admin/PageShell";
+import { apiRequest } from "@/api/client";
 
 // Import dữ liệu khóa học nếu cần mở rộng sau này
 // import { courses } from "@/data/courses";
@@ -18,7 +22,6 @@ import { PageShell } from "@/components/admin/PageShell";
 type Course = {
   maKhoaHoc: number;
   tenKhoaHoc: string;
-  maCode?: string;
   trinhDo?: string;
   moTa?: string;
   tongSoBuoi?: number;
@@ -27,93 +30,27 @@ type Course = {
   dangHoatDong?: boolean;
 };
 
-const courses: Course[] = [
-  {
-    maKhoaHoc: 1,
-    tenKhoaHoc: "IELTS Foundation",
-    maCode: "IELTS-FND",
-    trinhDo: "A2-B1",
-    moTa: "Khóa học nền tảng cho học viên bắt đầu luyện IELTS.",
-    tongSoBuoi: 24,
-    soTuanHoc: 12,
-    hocPhiChuan: 4200000,
-    dangHoatDong: true,
-  },
-  {
-    maKhoaHoc: 2,
-    tenKhoaHoc: "Conversation Club",
-    maCode: "CONV-CLB",
-    trinhDo: "B1-B2",
-    moTa: "Rèn kỹ năng giao tiếp thực tế qua các chủ đề đời sống.",
-    tongSoBuoi: 16,
-    soTuanHoc: 8,
-    hocPhiChuan: 2600000,
-    dangHoatDong: true,
-  },
-  {
-    maKhoaHoc: 3,
-    tenKhoaHoc: "Business English",
-    maCode: "BUS-ENG",
-    trinhDo: "B2",
-    moTa: "Khóa học tiếng Anh thương mại cho môi trường công việc.",
-    tongSoBuoi: 20,
-    soTuanHoc: 10,
-    hocPhiChuan: 3900000,
-    dangHoatDong: true,
-  },
-  {
-    maKhoaHoc: 4,
-    tenKhoaHoc: "Toeic Intensive",
-    maCode: "TOEIC-INT",
-    trinhDo: "B1-B2",
-    moTa: "Khóa tập trung luyện thi Toeic với đề mô phỏng thực tế.",
-    tongSoBuoi: 30,
-    soTuanHoc: 15,
-    hocPhiChuan: 4800000,
-    dangHoatDong: false,
-  },
-];
-
-const stats = [
-  {
-    label: "Tổng khóa học",
-    value: "4",
-    note: "Đang quản lý",
-    icon: FolderOpen,
-    tone: "from-violet-200 via-violet-100 to-pink-100",
-  },
-  {
-    label: "Đang hoạt động",
-    value: "3",
-    note: "Khóa học mở",
-    icon: BadgeCheck,
-    tone: "from-emerald-200 via-emerald-100 to-lime-100",
-  },
-  {
-    label: "Số buổi trung bình",
-    value: "22",
-    note: "Mỗi khóa",
-    icon: Clock3,
-    tone: "from-sky-200 via-cyan-100 to-emerald-100",
-  },
-  {
-    label: "Học phí trung bình",
-    value: "3.7M",
-    note: "Theo khóa",
-    icon: CircleDollarSign,
-    tone: "from-amber-200 via-yellow-100 to-orange-100",
-  },
-];
-
 const pageSize = 3;
+const levelOptions = [
+  ...["A1", "A2", "B1", "B2"].map((level) => ({ value: level, label: level })),
+  ...Array.from({ length: 13 }, (_, index) => {
+    const band = (3 + index * 0.5).toFixed(1);
+    return { value: `IELTS ${band}`, label: `IELTS ${band}` };
+  }),
+  { value: "TOEIC <120 (dưới A1)", label: "TOEIC <120 (dưới A1)" },
+  { value: "TOEIC 120-224 (A1)", label: "TOEIC 120-224 (A1)" },
+  { value: "TOEIC 225-549 (A2)", label: "TOEIC 225-549 (A2)" },
+  { value: "TOEIC 550-784 (B1)", label: "TOEIC 550-784 (B1)" },
+  { value: "TOEIC 785-944 (B2)", label: "TOEIC 785-944 (B2)" },
+  { value: "TOEIC 945-990 (C1)", label: "TOEIC 945-990 (C1)" },
+];
 
 type CourseForm = {
   tenKhoaHoc: string;
-  maCode: string;
   trinhDo: string;
   moTa: string;
-  avatarUrl: string;
   tongSoBuoi: string;
+  soBuoiMoiTuan: string;
   soTuanHoc: string;
   hocPhiChuan: string;
   dangHoatDong: string;
@@ -121,29 +58,56 @@ type CourseForm = {
 
 const emptyCourseForm: CourseForm = {
   tenKhoaHoc: "",
-  maCode: "",
   trinhDo: "",
   moTa: "",
-  avatarUrl: "",
   tongSoBuoi: "",
+  soBuoiMoiTuan: "",
   soTuanHoc: "",
   hocPhiChuan: "",
   dangHoatDong: "true",
 };
 
+const getWeeksFromSessions = (totalSessions: string, sessionsPerWeek: string) => {
+  const total = Number(totalSessions);
+  const weekly = Number(sessionsPerWeek);
+  return total > 0 && weekly > 0 ? String(Math.ceil(total / weekly)) : "";
+};
+
 export default function CourseManagementPage() {
-  const [courseList, setCourseList] = useState<Course[]>(courses);
+  const [courseList, setCourseList] = useState<Course[]>([]);
   const [levelFilter, setLevelFilter] = useState("Tất cả trình độ");
+  const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [isCreateFormOpen, setIsCreateFormOpen] = useState(false);
+  const [editingCourse, setEditingCourse] = useState<Course | null>(null);
   const [courseForm, setCourseForm] = useState<CourseForm>(emptyCourseForm);
-  const levelOptions = useMemo(
-    () =>
-      Array.from(
-        new Set(courseList.map((course) => course.trinhDo).filter(Boolean)),
-      ),
-    [courseList],
-  );
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
+  const loadCourses = useCallback(async () => {
+    setIsLoading(true);
+    setErrorMessage("");
+    try {
+      const data = await apiRequest<Course[]>("/KhoaHoc");
+      setCourseList(data);
+      return true;
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Không tải được khóa học.");
+      return false;
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void apiRequest<Course[]>("/KhoaHoc")
+      .then(setCourseList)
+      .catch((error: unknown) => {
+        setErrorMessage(error instanceof Error ? error.message : "Không tải được khóa học.");
+      })
+      .finally(() => setIsLoading(false));
+  }, []);
+
   const filteredCourses = useMemo(
     () =>
       levelFilter === "Tất cả trình độ"
@@ -151,52 +115,146 @@ export default function CourseManagementPage() {
         : courseList.filter((course) => course.trinhDo === levelFilter),
     [courseList, levelFilter],
   );
-  const totalPages = Math.max(1, Math.ceil(filteredCourses.length / pageSize));
+  const visibleCourses = useMemo(() => {
+    const keyword = searchTerm.trim().toLocaleLowerCase("vi");
+    if (!keyword) return filteredCourses;
+    return filteredCourses.filter((course) =>
+      [course.tenKhoaHoc, course.trinhDo, course.moTa]
+        .some((value) => value?.toLocaleLowerCase("vi").includes(keyword)),
+    );
+  }, [filteredCourses, searchTerm]);
+  const totalPages = Math.max(1, Math.ceil(visibleCourses.length / pageSize));
   const safePage = Math.min(currentPage, totalPages);
   const startIndex = (safePage - 1) * pageSize;
-  const currentCourses = filteredCourses.slice(
+  const currentCourses = visibleCourses.slice(
     startIndex,
     startIndex + pageSize,
   );
 
-  const handleCreateCourse = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!courseForm.tenKhoaHoc.trim()) return;
+  const stats = [
+    {
+      label: "Tổng khóa học",
+      value: courseList.length.toLocaleString("vi-VN"),
+      note: "Đang quản lý",
+      icon: FolderOpen,
+      tone: "from-violet-200 via-violet-100 to-pink-100",
+    },
+    {
+      label: "Đang hoạt động",
+      value: courseList.filter((course) => course.dangHoatDong).length.toLocaleString("vi-VN"),
+      note: "Khóa học mở",
+      icon: BadgeCheck,
+      tone: "from-emerald-200 via-emerald-100 to-lime-100",
+    },
+    {
+      label: "Số buổi trung bình",
+      value: courseList.length
+        ? Math.round(courseList.reduce((sum, course) => sum + (course.tongSoBuoi ?? 0), 0) / courseList.length).toLocaleString("vi-VN")
+        : "0",
+      note: "Mỗi khóa",
+      icon: Clock3,
+      tone: "from-sky-200 via-cyan-100 to-emerald-100",
+    },
+    {
+      label: "Học phí trung bình",
+      value: courseList.length
+        ? `${Math.round(courseList.reduce((sum, course) => sum + (course.hocPhiChuan ?? 0), 0) / courseList.length).toLocaleString("vi-VN")}đ`
+        : "0đ",
+      note: "Theo khóa",
+      icon: CircleDollarSign,
+      tone: "from-amber-200 via-yellow-100 to-orange-100",
+    },
+  ];
 
-    const nextCourse: Course = {
-      maKhoaHoc:
-        Math.max(0, ...courseList.map((course) => course.maKhoaHoc)) + 1,
-      tenKhoaHoc: courseForm.tenKhoaHoc.trim(),
-      maCode: courseForm.maCode.trim() || undefined,
-      trinhDo: courseForm.trinhDo.trim() || undefined,
-      moTa: courseForm.moTa.trim() || undefined,
-      tongSoBuoi: courseForm.tongSoBuoi
-        ? Number(courseForm.tongSoBuoi)
-        : undefined,
-      soTuanHoc: courseForm.soTuanHoc
-        ? Number(courseForm.soTuanHoc)
-        : undefined,
-      hocPhiChuan: courseForm.hocPhiChuan
-        ? Number(courseForm.hocPhiChuan)
-        : undefined,
-      dangHoatDong: courseForm.dangHoatDong === "true",
-    };
-
-    setCourseList((items) => [nextCourse, ...items]);
-    setLevelFilter("Tất cả trình độ");
-    setCurrentPage(1);
+  const openCreateForm = () => {
+    setEditingCourse(null);
     setCourseForm(emptyCourseForm);
-    setIsCreateFormOpen(false);
+    setErrorMessage("");
+    setIsCreateFormOpen(true);
+  };
+
+  const openEditForm = (course: Course) => {
+    const totalSessions = course.tongSoBuoi?.toString() ?? "";
+    const existingWeeks = course.soTuanHoc ?? 0;
+    const existingSessionsPerWeek =
+      existingWeeks > 0 && course.tongSoBuoi
+        ? course.tongSoBuoi / existingWeeks
+        : 0;
+    const sessionsPerWeek =
+      Number.isInteger(existingSessionsPerWeek) &&
+      existingSessionsPerWeek >= 1 &&
+      existingSessionsPerWeek <= 7
+        ? String(existingSessionsPerWeek)
+        : "";
+    setEditingCourse(course);
+    setCourseForm({
+      tenKhoaHoc: course.tenKhoaHoc,
+      trinhDo: levelOptions.some((level) => level.value === course.trinhDo)
+        ? course.trinhDo ?? ""
+        : "",
+      moTa: course.moTa ?? "",
+      tongSoBuoi: totalSessions,
+      soBuoiMoiTuan: sessionsPerWeek,
+      soTuanHoc: sessionsPerWeek
+        ? getWeeksFromSessions(totalSessions, sessionsPerWeek)
+        : existingWeeks.toString(),
+      hocPhiChuan: course.hocPhiChuan?.toString() ?? "",
+      dangHoatDong: course.dangHoatDong == null ? "null" : String(course.dangHoatDong),
+    });
+    setErrorMessage("");
+    setIsCreateFormOpen(true);
+  };
+
+  const handleSaveCourse = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setIsSaving(true);
+    setErrorMessage("");
+    try {
+      await apiRequest(editingCourse ? `/KhoaHoc/${editingCourse.maKhoaHoc}` : "/KhoaHoc", {
+        method: editingCourse ? "PUT" : "POST",
+        body: {
+          tenKhoaHoc: courseForm.tenKhoaHoc.trim(),
+          trinhDo: courseForm.trinhDo.trim() || null,
+          moTa: courseForm.moTa.trim() || null,
+          tongSoBuoi: courseForm.tongSoBuoi ? Number(courseForm.tongSoBuoi) : null,
+          soTuanHoc: courseForm.soTuanHoc ? Number(courseForm.soTuanHoc) : null,
+          hocPhiChuan: courseForm.hocPhiChuan ? Number(courseForm.hocPhiChuan) : null,
+          dangHoatDong: courseForm.dangHoatDong === "null" ? null : courseForm.dangHoatDong === "true",
+        },
+      });
+      const reloaded = await loadCourses();
+      if (!reloaded) return;
+      setLevelFilter("Tất cả trình độ");
+      setCurrentPage(1);
+      setCourseForm(emptyCourseForm);
+      setEditingCourse(null);
+      setIsCreateFormOpen(false);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Không thể tạo khóa học.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDeleteCourse = async (course: Course) => {
+    if (!window.confirm(`Bạn có chắc muốn xóa khóa học "${course.tenKhoaHoc}"?`)) return;
+    setErrorMessage("");
+    try {
+      await apiRequest(`/KhoaHoc/${course.maKhoaHoc}`, { method: "DELETE" });
+      await loadCourses();
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Không thể xóa khóa học.");
+    }
   };
 
   return (
     <PageShell
       title="Quản lý khóa học"
-      description="Theo dõi danh sách khóa học, mã code, trình độ và học phí của từng chương trình"
+      description="Theo dõi danh sách khóa học, trình độ và học phí của từng chương trình"
       action={
         <button
           type="button"
-          onClick={() => setIsCreateFormOpen(true)}
+          onClick={openCreateForm}
           className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-violet-500 to-pink-400 px-4 py-2 text-sm font-medium text-white shadow-[0_12px_30px_rgba(168,85,247,0.2)]"
         >
           <Plus className="h-4 w-4" />
@@ -224,6 +282,12 @@ export default function CourseManagementPage() {
         ))}
       </div>
 
+      {errorMessage && (
+        <div role="alert" className="mb-4 rounded-xl bg-rose-50 px-4 py-3 text-sm text-rose-700">
+          {errorMessage}
+        </div>
+      )}
+
       <div className="rounded-[28px] border border-violet-100 bg-white p-5 shadow-[0_20px_50px_rgba(140,122,255,0.06)]">
         <div className="mb-4 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
@@ -233,11 +297,24 @@ export default function CourseManagementPage() {
             </h3>
           </div>
           <span className="rounded-full bg-violet-50 px-2.5 py-1 text-xs font-medium text-violet-600">
-            {filteredCourses.length} khóa học
+            {visibleCourses.length} khóa học
           </span>
         </div>
 
-        <div className="mb-4 flex items-center gap-3">
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row">
+          <label className="relative block flex-1">
+            <span className="sr-only">Tìm kiếm khóa học</span>
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <input
+              value={searchTerm}
+              onChange={(event) => {
+                setSearchTerm(event.target.value);
+                setCurrentPage(1);
+              }}
+              placeholder="Tìm theo tên, trình độ hoặc mô tả..."
+              className="w-full rounded-full border border-violet-100 bg-slate-50 py-2.5 pl-9 pr-4 text-sm text-slate-700 outline-none transition focus:border-violet-300"
+            />
+          </label>
           <select
             value={levelFilter}
             onChange={(event) => {
@@ -247,9 +324,9 @@ export default function CourseManagementPage() {
             aria-label="Lọc theo trình độ"
             className="rounded-full border border-violet-100 bg-slate-50 px-3 py-2.5 text-sm text-slate-600 outline-none transition focus:border-violet-300"
           >
-            <option>Tất cả trình độ</option>
+            <option value="Tất cả trình độ">Tất cả trình độ</option>
             {levelOptions.map((level) => (
-              <option key={level}>{level}</option>
+              <option key={level.value} value={level.value}>{level.label}</option>
             ))}
           </select>
         </div>
@@ -259,7 +336,6 @@ export default function CourseManagementPage() {
             <thead>
               <tr className="text-sm text-slate-500">
                 <th className="px-3 py-2 font-semibold">Tên khóa học</th>
-                <th className="px-3 py-2 font-semibold">Mã code</th>
                 <th className="px-3 py-2 font-semibold">Trình độ</th>
                 <th className="px-3 py-2 text-right font-semibold">
                   Tổng buổi
@@ -267,10 +343,13 @@ export default function CourseManagementPage() {
                 <th className="px-3 py-2 text-right font-semibold">Số tuần</th>
                 <th className="px-3 py-2 text-right font-semibold">Học phí</th>
                 <th className="px-3 py-2 font-semibold">Trạng thái</th>
+                <th className="px-3 py-2 text-right font-semibold">Thao tác</th>
               </tr>
             </thead>
             <tbody>
-              {currentCourses.map((course) => (
+              {isLoading ? (
+                <tr><td colSpan={7} className="px-3 py-8 text-center text-slate-500">Đang tải khóa học...</td></tr>
+              ) : currentCourses.map((course) => (
                 <tr
                   key={course.maKhoaHoc}
                   className="rounded-2xl bg-slate-50 text-sm text-slate-700 shadow-sm"
@@ -283,7 +362,6 @@ export default function CourseManagementPage() {
                       {course.moTa}
                     </div>
                   </td>
-                  <td className="px-3 py-3">{course.maCode ?? "--"}</td>
                   <td className="px-3 py-3">{course.trinhDo ?? "--"}</td>
                   <td className="px-3 py-3 text-right">
                     {course.tongSoBuoi ?? "--"}
@@ -307,11 +385,29 @@ export default function CourseManagementPage() {
                       {course.dangHoatDong ? "Đang hoạt động" : "Ngừng"}
                     </span>
                   </td>
+                  <td className="px-3 py-3 text-right">
+                    <button
+                      type="button"
+                      onClick={() => openEditForm(course)}
+                      className="rounded-lg p-2 text-violet-600 transition hover:bg-violet-50"
+                      aria-label={`Sửa khóa học ${course.tenKhoaHoc}`}
+                    >
+                      <Edit3 className="h-4 w-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleDeleteCourse(course)}
+                      className="rounded-lg p-2 text-rose-500 transition hover:bg-rose-50"
+                      aria-label={`Xóa khóa học ${course.tenKhoaHoc}`}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
-          {!filteredCourses.length && (
+          {!isLoading && !visibleCourses.length && (
             <p className="py-10 text-center text-sm text-slate-400">
               Không tìm thấy khóa học phù hợp.
             </p>
@@ -321,8 +417,8 @@ export default function CourseManagementPage() {
         <div className="mt-6 flex flex-col gap-3 border-t border-slate-100 pt-4 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm text-slate-500">
             Hiển thị {currentCourses.length ? startIndex + 1 : 0} -{" "}
-            {Math.min(startIndex + pageSize, filteredCourses.length)} /{" "}
-            {filteredCourses.length}
+            {Math.min(startIndex + pageSize, visibleCourses.length)} /{" "}
+            {visibleCourses.length}
           </p>
           <div className="flex items-center gap-2">
             <button
@@ -372,22 +468,23 @@ export default function CourseManagementPage() {
       {isCreateFormOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/25 p-4">
           <form
-            onSubmit={handleCreateCourse}
+            onSubmit={handleSaveCourse}
             className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-[28px] bg-white p-6 shadow-2xl"
           >
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-violet-400">
-                  CreateKhoaHocRequest
+                  {editingCourse ? "Cập nhật khóa học" : "Tạo khóa học"}
                 </p>
                 <h3 className="mt-1 text-xl font-bold text-slate-800">
-                  Thêm khóa học
+                  {editingCourse ? "Cập nhật khóa học" : "Thêm khóa học"}
                 </h3>
               </div>
               <button
                 type="button"
                 onClick={() => {
                   setCourseForm(emptyCourseForm);
+                  setEditingCourse(null);
                   setIsCreateFormOpen(false);
                 }}
                 className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-500 transition hover:bg-slate-200"
@@ -414,20 +511,9 @@ export default function CourseManagementPage() {
                 />
               </label>
               <label className="text-sm font-medium text-slate-600">
-                Mã khóa học
-                <input
-                  maxLength={20}
-                  value={courseForm.maCode}
-                  onChange={(event) =>
-                    setCourseForm({ ...courseForm, maCode: event.target.value })
-                  }
-                  className="mt-1.5 w-full rounded-xl border border-slate-200 px-3 py-2.5 font-normal text-slate-700 outline-none focus:border-violet-300"
-                />
-              </label>
-              <label className="text-sm font-medium text-slate-600">
                 Trình độ
-                <input
-                  maxLength={50}
+                <select
+                  required
                   value={courseForm.trinhDo}
                   onChange={(event) =>
                     setCourseForm({
@@ -436,7 +522,12 @@ export default function CourseManagementPage() {
                     })
                   }
                   className="mt-1.5 w-full rounded-xl border border-slate-200 px-3 py-2.5 font-normal text-slate-700 outline-none focus:border-violet-300"
-                />
+                >
+                  <option value="" disabled>Chọn trình độ</option>
+                  {levelOptions.map((level) => (
+                    <option key={level.value} value={level.value}>{level.label}</option>
+                  ))}
+                </select>
               </label>
               <label className="text-sm font-medium text-slate-600">
                 Tổng số buổi
@@ -444,29 +535,50 @@ export default function CourseManagementPage() {
                   min="1"
                   type="number"
                   value={courseForm.tongSoBuoi}
-                  onChange={(event) =>
-                    setCourseForm({
-                      ...courseForm,
-                      tongSoBuoi: event.target.value,
-                    })
-                  }
+                  onChange={(event) => {
+                    const tongSoBuoi = event.target.value;
+                    setCourseForm((form) => ({
+                      ...form,
+                      tongSoBuoi,
+                      soTuanHoc: getWeeksFromSessions(tongSoBuoi, form.soBuoiMoiTuan),
+                    }));
+                  }}
                   className="mt-1.5 w-full rounded-xl border border-slate-200 px-3 py-2.5 font-normal text-slate-700 outline-none focus:border-violet-300"
                 />
+              </label>
+              <label className="text-sm font-medium text-slate-600">
+                Số buổi mỗi tuần
+                <select
+                  value={courseForm.soBuoiMoiTuan}
+                  onChange={(event) => {
+                    const soBuoiMoiTuan = event.target.value;
+                    setCourseForm((form) => ({
+                      ...form,
+                      soBuoiMoiTuan,
+                      soTuanHoc: getWeeksFromSessions(form.tongSoBuoi, soBuoiMoiTuan),
+                    }));
+                  }}
+                  className="mt-1.5 w-full rounded-xl border border-slate-200 px-3 py-2.5 font-normal text-slate-700 outline-none focus:border-violet-300"
+                >
+                  <option value="">Chọn số buổi/tuần</option>
+                  {Array.from({ length: 7 }, (_, index) => index + 1).map((count) => (
+                    <option key={count} value={count}>{count} buổi/tuần</option>
+                  ))}
+                </select>
               </label>
               <label className="text-sm font-medium text-slate-600">
                 Số tuần học
                 <input
                   min="1"
                   type="number"
+                  readOnly
                   value={courseForm.soTuanHoc}
-                  onChange={(event) =>
-                    setCourseForm({
-                      ...courseForm,
-                      soTuanHoc: event.target.value,
-                    })
-                  }
-                  className="mt-1.5 w-full rounded-xl border border-slate-200 px-3 py-2.5 font-normal text-slate-700 outline-none focus:border-violet-300"
+                  placeholder="Tự tính khi có tổng buổi và buổi/tuần"
+                  className="mt-1.5 w-full rounded-xl border border-slate-200 bg-slate-100 px-3 py-2.5 font-normal text-slate-700 outline-none"
                 />
+                <span className="mt-1 block text-xs font-normal text-slate-500">
+                  Tự tính bằng tổng số buổi chia cho số buổi mỗi tuần, làm tròn lên.
+                </span>
               </label>
               <label className="text-sm font-medium text-slate-600">
                 Học phí chuẩn
@@ -479,20 +591,6 @@ export default function CourseManagementPage() {
                     setCourseForm({
                       ...courseForm,
                       hocPhiChuan: event.target.value,
-                    })
-                  }
-                  className="mt-1.5 w-full rounded-xl border border-slate-200 px-3 py-2.5 font-normal text-slate-700 outline-none focus:border-violet-300"
-                />
-              </label>
-              <label className="text-sm font-medium text-slate-600">
-                Avatar URL
-                <input
-                  type="url"
-                  value={courseForm.avatarUrl}
-                  onChange={(event) =>
-                    setCourseForm({
-                      ...courseForm,
-                      avatarUrl: event.target.value,
                     })
                   }
                   className="mt-1.5 w-full rounded-xl border border-slate-200 px-3 py-2.5 font-normal text-slate-700 outline-none focus:border-violet-300"
@@ -533,6 +631,7 @@ export default function CourseManagementPage() {
                 type="button"
                 onClick={() => {
                   setCourseForm(emptyCourseForm);
+                  setEditingCourse(null);
                   setIsCreateFormOpen(false);
                 }}
                 className="rounded-full border border-slate-200 px-4 py-2 text-sm text-slate-600 transition hover:bg-slate-50"
@@ -541,9 +640,10 @@ export default function CourseManagementPage() {
               </button>
               <button
                 type="submit"
-                className="rounded-full bg-violet-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-violet-700"
+                disabled={isSaving}
+                className="rounded-full bg-violet-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-violet-700 disabled:opacity-50"
               >
-                Thêm khóa học
+                {isSaving ? "Đang lưu..." : editingCourse ? "Lưu thay đổi" : "Thêm khóa học"}
               </button>
             </div>
           </form>

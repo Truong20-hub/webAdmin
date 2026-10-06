@@ -19,6 +19,7 @@ export default function LoginPage() {
   const [matKhau, setMatKhau] = useState("admin123");
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  
   const click = () => {
     console.log("tenDangNhap:", tenDangNhap);
     console.log("matKhau:", matKhau);
@@ -42,12 +43,17 @@ export default function LoginPage() {
       window.localStorage.setItem("accessToken", result.token);
       window.localStorage.setItem("currentUser", JSON.stringify(result));
       router.push("/admin");
-    } catch (loginError) {
-      setError(
-        loginError instanceof Error
-          ? loginError.message
-          : "Đăng nhập thất bại.",
-      );
+      } catch (ex) {
+      let msg = "Đã có lỗi xảy ra.";
+      if (ex instanceof Error) {
+        try {
+          // lỗi dạng {"message":"..."} -> lấy phần message
+          msg = JSON.parse(ex.message).message ?? ex.message;
+        } catch {
+          msg = ex.message; // không phải JSON thì giữ nguyên
+        }
+      }
+      setError(msg);
     } finally {
       setIsLoading(false);
     }

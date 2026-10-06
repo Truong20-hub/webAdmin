@@ -17,6 +17,18 @@ import { PageShell } from "@/components/admin/PageShell";
 
 const pageSize = 5;
 
+type Role = {
+  maVaiTro: number;
+  tenVaiTro: string;
+};
+
+const roles: Role[] = [
+  { maVaiTro: 1, tenVaiTro: "Quản trị viên" },
+  { maVaiTro: 2, tenVaiTro: "Giáo viên" },
+  { maVaiTro: 3, tenVaiTro: "Học viên" },
+  { maVaiTro: 10, tenVaiTro: "Phụ huynh" },
+];
+
 type UserForm = {
   maNguoiDung: string;
   tenDangNhap: string;
@@ -62,17 +74,61 @@ const mapUserResponse = (user: UserResponse): Account => ({
   dangHoatDong: user.dangHoatDong ?? true,
 });
 
+/**
+ * Lấy đúng nội dung message từ lỗi.
+ * - Lỗi dạng {"message":"..."}  -> trả về "..."
+ * - Lỗi là chuỗi thường         -> trả về nguyên chuỗi
+ */
+const getErrorMessage = (
+  error: unknown,
+  fallback = "Đã có lỗi xảy ra. Vui lòng thử lại.",
+): string => {
+  if (!(error instanceof Error) || !error.message) return fallback;
+
+  let msg = error.message;
+
+  // Trường hợp {"message":"..."}
+  try {
+    const data = JSON.parse(msg);
+    msg =
+      typeof data === "string"
+        ? data
+        : (data?.message ?? data?.title ?? fallback);
+  } catch {
+    // không phải JSON thì giữ nguyên
+  }
+
+  // Bỏ stack trace: chỉ lấy dòng đầu, cắt trước "   at ..."
+  msg = msg.split("\n")[0];
+  const atIndex = msg.indexOf("   at ");
+  if (atIndex > 0) msg = msg.slice(0, atIndex);
+
+  // Bỏ tiền tố kiểu "System.Exception: "
+  msg = msg.replace(/^[\w.]+Exception:\s*/, "").trim();
+
+  // Lỗi kỹ thuật của EF/SQL hoặc quá dài thì hiện thông báo chung
+  if (!msg || msg.length > 200 || /EntityFrameworkCore|SqlClient/.test(msg)) {
+    return fallback;
+  }
+  return msg;
+};
+
 export default function UserManagementPage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
-  const [isCreateFormOpen, setIsCreateFormOpen] = useState(false);
+  const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
   const [userForm, setUserForm] = useState<UserForm>(emptyUserForm);
+  const [selectedRoleId, setSelectedRoleId] = useState<number | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const [error, setError] = useState("");
+
+  // Hộp thoại báo lỗi
+  const [errorMessage, setErrorMessage] = useState("");
+  // true khi lưu thất bại -> cho phép "Nhập lại" (mở lại form với dữ liệu cũ)
+  const [canRetry, setCanRetry] = useState(false);
 
   const userFormFields = [
     ["tenDangNhap", "Tên đăng nhập", "text", true],
@@ -80,7 +136,6 @@ export default function UserManagementPage() {
     ["hoTen", "Họ tên", "text", true],
     ["email", "Email", "email", false],
     ["soDienThoai", "Số điện thoại", "tel", false],
-    ["maVaiTro", "Mã vai trò", "number", true],
   ] as const;
 
   const filteredAccounts = accounts.filter((account) =>
@@ -98,15 +153,12 @@ export default function UserManagementPage() {
 
   const loadAccounts = async () => {
     setIsLoading(true);
-    setError("");
     try {
       const users = await apiRequest<UserResponse[]>("/NguoiDung");
       setAccounts(users.map(mapUserResponse));
     } catch (loadError) {
-      setError(
-        loadError instanceof Error
-          ? loadError.message
-          : "Không thể tải danh sách người dùng.",
+      setErrorMessage(
+        getErrorMessage(loadError, "Không thể tải danh sách người dùng."),
       );
     } finally {
       setIsLoading(false);
@@ -118,16 +170,38 @@ export default function UserManagementPage() {
     void Promise.resolve().then(loadAccounts);
   }, []);
 
+  const resetForm = () => {
+    setEditingAccount(null);
+    setUserForm(emptyUserForm);
+    setSelectedRoleId(null);
+  };
+
   const openUserForm = (account?: Account) => {
     setEditingAccount(account ?? null);
     setUserForm(account ? { ...account } : emptyUserForm);
-    setIsCreateFormOpen(true);
+    setSelectedRoleId(account?.maVaiTro ? Number(account.maVaiTro) : null);
+    setIsFormOpen(true);
   };
 
   const closeUserForm = () => {
-    setEditingAccount(null);
-    setUserForm(emptyUserForm);
-    setIsCreateFormOpen(false);
+    resetForm();
+    setIsFormOpen(false);
+  };
+
+  // Đóng hộp thoại lỗi. Nếu lỗi do lưu thất bại thì bỏ dữ liệu form đã nhập.
+  const dismissError = () => {
+    setErrorMessage("");
+    if (canRetry) {
+      resetForm();
+      setCanRetry(false);
+    }
+  };
+
+  // Đóng hộp thoại lỗi và mở lại form với dữ liệu vừa nhập.
+  const retryFromError = () => {
+    setErrorMessage("");
+    setCanRetry(false);
+    setIsFormOpen(true);
   };
 
   const handleAvatarChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -147,25 +221,36 @@ export default function UserManagementPage() {
 
   const handleSubmitUser = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+
+    if (selectedRoleId === null) {
+      setErrorMessage("Vui lòng chọn vai trò.");
+      return;
+    }
+
+    // Nhấn Thêm / Sửa là tắt form ngay
+    setIsFormOpen(false);
     setIsSaving(true);
-    setError("");
 
     try {
       const commonData = {
         hoTen: userForm.hoTen.trim(),
         email: userForm.email.trim() || null,
         soDienThoai: userForm.soDienThoai.trim() || null,
-        maVaiTro: Number(userForm.maVaiTro),
+        maVaiTro: selectedRoleId,
         avatarUrl: userForm.avatarUrl.trim() || null,
       };
 
       if (editingAccount) {
-        await apiRequest(`/NguoiDung/${editingAccount.maNguoiDung}`, {
-          method: "PUT",
-          body: { ...commonData, dangHoatDong: userForm.dangHoatDong },
-        });
+        const res = await apiRequest(
+          `/NguoiDung/${editingAccount.maNguoiDung}`,
+          {
+            method: "PUT",
+            body: { ...commonData, dangHoatDong: userForm.dangHoatDong },
+          },
+        );
+        console.log(res);
       } else {
-        await apiRequest("/NguoiDung", {
+        const res = await apiRequest("/NguoiDung", {
           method: "POST",
           body: {
             ...commonData,
@@ -174,17 +259,16 @@ export default function UserManagementPage() {
             matKhau: userForm.matKhau.trim(),
           },
         });
+        alert(res);
+        console.log(res);
       }
 
+      resetForm();
       await loadAccounts();
       setCurrentPage(1);
-      closeUserForm();
     } catch (saveError) {
-      setError(
-        saveError instanceof Error
-          ? saveError.message
-          : "Không thể lưu người dùng.",
-      );
+      setCanRetry(true);
+      setErrorMessage(getErrorMessage(saveError, "Không thể lưu người dùng."));
     } finally {
       setIsSaving(false);
     }
@@ -194,17 +278,14 @@ export default function UserManagementPage() {
     if (!window.confirm(`Bạn có chắc muốn xóa người dùng ${account.hoTen}?`))
       return;
 
-    setError("");
     try {
       await apiRequest(`/NguoiDung/${account.maNguoiDung}`, {
         method: "DELETE",
       });
       await loadAccounts();
     } catch (deleteError) {
-      setError(
-        deleteError instanceof Error
-          ? deleteError.message
-          : "Không thể xóa người dùng.",
+      setErrorMessage(
+        getErrorMessage(deleteError, "Không thể xóa người dùng."),
       );
     }
   };
@@ -272,7 +353,7 @@ export default function UserManagementPage() {
       }>;
 
       if (!importedAccounts.length) {
-        alert(
+        setErrorMessage(
           "File không chứa dữ liệu hợp lệ. Cần có các cột username và fullName (hoặc Tên đăng nhập và Họ tên).",
         );
         return;
@@ -296,9 +377,14 @@ export default function UserManagementPage() {
       await loadAccounts();
       setCurrentPage(1);
       alert(`Đã import ${importedAccounts.length} tài khoản thành công.`);
-    } catch (error) {
-      console.error(error);
-      alert("Import file thất bại. Vui lòng kiểm tra định dạng Excel/CSV.");
+    } catch (importError) {
+      console.error(importError);
+      setErrorMessage(
+        getErrorMessage(
+          importError,
+          "Import file thất bại. Vui lòng kiểm tra định dạng Excel/CSV.",
+        ),
+      );
     } finally {
       event.target.value = "";
     }
@@ -362,12 +448,6 @@ export default function UserManagementPage() {
           </div>
         </div>
 
-        {error && (
-          <p className="mt-4 rounded-xl bg-rose-50 px-4 py-3 text-sm text-rose-600">
-            {error}
-          </p>
-        )}
-
         <div className="mt-5 overflow-x-auto">
           <table className="min-w-full border-separate border-spacing-0 text-left">
             <thead>
@@ -381,13 +461,15 @@ export default function UserManagementPage() {
               </tr>
             </thead>
             <tbody>
-              {isLoading ? (
+              {isLoading || isSaving ? (
                 <tr>
                   <td
                     colSpan={4}
                     className="px-4 py-8 text-center text-sm text-slate-500"
                   >
-                    Đang tải danh sách người dùng...
+                    {isSaving
+                      ? "Đang lưu..."
+                      : "Đang tải danh sách người dùng..."}
                   </td>
                 </tr>
               ) : currentAccounts.length === 0 ? (
@@ -402,7 +484,7 @@ export default function UserManagementPage() {
               ) : (
                 currentAccounts.map((account) => (
                   <tr
-                    key={`${account.tenDangNhap}-${account.hoTen}`}
+                    key={account.maNguoiDung}
                     className="border-t border-slate-100"
                   >
                     <td className="px-4 py-3 align-middle text-left text-sm font-medium text-slate-700">
@@ -453,8 +535,8 @@ export default function UserManagementPage() {
         <div className="mt-6 flex flex-col gap-3 border-t border-slate-100 pt-4 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm text-slate-500">
             Hiển thị {currentAccounts.length > 0 ? startIndex + 1 : 0} -{" "}
-            {Math.min(startIndex + pageSize, accounts.length)} /{" "}
-            {accounts.length}
+            {Math.min(startIndex + pageSize, filteredAccounts.length)} /{" "}
+            {filteredAccounts.length}
           </p>
 
           <div className="flex items-center gap-2">
@@ -490,7 +572,7 @@ export default function UserManagementPage() {
 
             <button
               type="button"
-              disabled={currentPage === totalPages}
+              disabled={currentPage === totalPages || totalPages === 0}
               onClick={() =>
                 setCurrentPage((page) => Math.min(totalPages, page + 1))
               }
@@ -502,7 +584,8 @@ export default function UserManagementPage() {
         </div>
       </div>
 
-      {isCreateFormOpen && (
+      {/* Form thêm / sửa người dùng */}
+      {isFormOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/25 p-4">
           <form
             onSubmit={handleSubmitUser}
@@ -565,6 +648,32 @@ export default function UserManagementPage() {
                   </label>
                 ))}
 
+              <label className="text-sm font-medium text-slate-600">
+                Vai trò
+                <select
+                  required
+                  value={selectedRoleId ?? ""}
+                  onChange={(event) => {
+                    const maVaiTro = event.target.value
+                      ? Number(event.target.value)
+                      : null;
+                    setSelectedRoleId(maVaiTro);
+                    setUserForm({
+                      ...userForm,
+                      maVaiTro: maVaiTro ? String(maVaiTro) : "",
+                    });
+                  }}
+                  className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 font-normal text-slate-700 outline-none transition focus:border-violet-300"
+                >
+                  <option value="">-- Chọn vai trò --</option>
+                  {roles.map((role) => (
+                    <option key={role.maVaiTro} value={role.maVaiTro}>
+                      {role.tenVaiTro}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
               {editingAccount && (
                 <label className="flex items-center gap-3 text-sm font-medium text-slate-600">
                   <input
@@ -621,16 +730,55 @@ export default function UserManagementPage() {
               <button
                 type="submit"
                 disabled={isSaving}
-                className="rounded-full bg-violet-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-violet-700"
+                className="rounded-full bg-violet-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {isSaving
-                  ? "Đang lưu..."
-                  : editingAccount
-                    ? "Lưu thay đổi"
-                    : "Thêm người dùng"}
+                {editingAccount ? "Lưu thay đổi" : "Thêm người dùng"}
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* Hộp thoại báo lỗi (nằm trên cùng, chỉ hiện message) */}
+      {errorMessage && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/40 p-4"
+          role="alertdialog"
+          aria-modal="true"
+          aria-labelledby="error-dialog-title"
+        >
+          <div className="w-full max-w-sm rounded-[24px] bg-white p-6 text-center shadow-2xl">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-rose-50 text-xl font-bold text-rose-500">
+              !
+            </div>
+            <h3
+              id="error-dialog-title"
+              className="mt-4 text-lg font-bold text-slate-800"
+            >
+              Có lỗi xảy ra
+            </h3>
+            <p className="mt-2 text-sm text-slate-600">{errorMessage}</p>
+
+            <div className="mt-6 flex justify-center gap-2">
+              {canRetry && (
+                <button
+                  type="button"
+                  onClick={retryFromError}
+                  className="rounded-full border border-violet-200 px-4 py-2 text-sm font-medium text-violet-600 transition hover:bg-violet-50"
+                >
+                  Nhập lại
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={dismissError}
+                autoFocus
+                className="rounded-full bg-violet-600 px-5 py-2 text-sm font-medium text-white transition hover:bg-violet-700"
+              >
+                Đóng
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </PageShell>
